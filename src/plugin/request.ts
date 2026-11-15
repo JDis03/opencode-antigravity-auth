@@ -44,6 +44,7 @@ import {
   parseAntigravityApiBody,
   resolveThinkingConfig,
   rewriteAntigravityPreviewAccessError,
+  sanitizeSystemInstructionForAntigravity,
   transformThinkingParts,
   type AntigravityApiBody,
 } from "./request-helpers";
@@ -1472,6 +1473,8 @@ export function prepareAntigravityRequest(
         // Inject Antigravity system instruction with role "user" (CLIProxyAPI v6.6.89 compatibility)
         // This sets request.systemInstruction.role = "user" and request.systemInstruction.parts[0].text
         if (headerStyle === "antigravity") {
+          // The Antigravity endpoint answers 429 for some literal strings in system prompts.
+          sanitizeSystemInstructionForAntigravity(requestPayload);
           const existingSystemInstruction = requestPayload.systemInstruction;
           if (existingSystemInstruction && typeof existingSystemInstruction === "object") {
             const sys = existingSystemInstruction as Record<string, unknown>;

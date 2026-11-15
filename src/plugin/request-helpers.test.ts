@@ -23,6 +23,7 @@ import {
   cleanJSONSchemaForAntigravity,
   createSyntheticErrorResponse,
   recursivelyParseJsonStrings,
+  sanitizeSystemInstructionForAntigravity,
 } from "./request-helpers";
 import { deduplicateThinkingText, createThoughtBuffer } from "./core/streaming/transformer";
 
@@ -1949,5 +1950,45 @@ describe("recursivelyParseJsonStrings", () => {
         },
       },
     });
+  });
+});
+
+describe("sanitizeSystemInstructionForAntigravity", () => {
+  it("rewrites the rejected OpenCode tool path in every system instruction part", () => {
+    const payload: Record<string, unknown> = {
+      systemInstruction: {
+        parts: [
+          { text: "call tools.opencode.session_move({ directory }) then tools.opencode.session_move again" },
+          { text: "unrelated tools.opencode.worktree_create" },
+        ],
+      },
+    };
+
+    sanitizeSystemInstructionForAntigravity(payload);
+
+    const parts = (payload.systemInstruction as { parts: Array<{ text: string }> }).parts;
+    expect(parts[0]?.text).toBe(
+      'call tools["opencode"].session_move({ directory }) then tools["opencode"].session_move again',
+    );
+    expect(parts[1]?.text).toBe("unrelated tools.opencode.worktree_create");
+  });
+
+  it("rewrites a string system instruction", () => {
+    const payload: Record<string, unknown> = { systemInstruction: "use tools.opencode.session_move" };
+
+    sanitizeSystemInstructionForAntigravity(payload);
+
+    expect(payload.systemInstruction).toBe('use tools["opencode"].session_move');
+  });
+
+  it("leaves contents and payloads without a system instruction untouched", () => {
+    const contents = [{ role: "user", parts: [{ text: "tools.opencode.session_move" }] }];
+    const payload: Record<string, unknown> = { contents };
+
+    sanitizeSystemInstructionForAntigravity(payload);
+
+    expect(payload.systemInstruction).toBeUndefined();
+    expect(payload.contents).toBe(contents);
+    expect(contents[0]?.parts[0]?.text).toBe("tools.opencode.session_move");
   });
 });

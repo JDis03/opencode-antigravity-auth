@@ -2565,6 +2565,49 @@ export function injectParameterSignatures(
  * @param payload - The Gemini request payload
  * @param instructionText - The instruction text to inject
  */
+/**
+ * Literal strings that make the Antigravity endpoint answer HTTP 429
+ * RESOURCE_EXHAUSTED when they appear in a system instruction, regardless of
+ * the account's real quota. Each rule rewrites the string into an equivalent
+ * form that the endpoint accepts.
+ *
+ * `tools.opencode.session_move` is the OpenCode V2 Code Mode tool path. The
+ * bracket form is the same JavaScript, so the model can still call the tool.
+ * Only system instructions are affected; the same text in user contents passes.
+ */
+const SYSTEM_INSTRUCTION_REWRITES: ReadonlyArray<readonly [string, string]> = [
+  ["tools.opencode.session_move", 'tools["opencode"].session_move'],
+];
+
+/**
+ * Rewrites strings the Antigravity endpoint rejects out of the system
+ * instruction text. Mutates the payload in place; no-op when nothing matches.
+ */
+export function sanitizeSystemInstructionForAntigravity(payload: Record<string, unknown>): void {
+  const rewrite = (text: string): string =>
+    SYSTEM_INSTRUCTION_REWRITES.reduce((acc, [from, to]) => acc.split(from).join(to), text);
+
+  const systemInstruction = payload.systemInstruction;
+  if (typeof systemInstruction === "string") {
+    payload.systemInstruction = rewrite(systemInstruction);
+    return;
+  }
+  if (!systemInstruction || typeof systemInstruction !== "object") {
+    return;
+  }
+
+  const parts = (systemInstruction as Record<string, unknown>).parts;
+  if (!Array.isArray(parts)) {
+    return;
+  }
+  for (const part of parts) {
+    if (part && typeof part === "object" && typeof (part as Record<string, unknown>).text === "string") {
+      const record = part as Record<string, unknown>;
+      record.text = rewrite(record.text as string);
+    }
+  }
+}
+
 export function injectToolHardeningInstruction(
   payload: Record<string, unknown>,
   instructionText: string,
